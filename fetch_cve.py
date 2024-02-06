@@ -1,18 +1,44 @@
-# problem with this is that it prints multiple json lists ie
-# [{key1, value1}],
-# [{key2, value2}]
-# can use non relational database
+# fetch cve
 import requests
 import json
 import time
+import boto3
+from boto3.dynamodb.conditions import Key
+from decimal import Decimal
 
-def output_to_file(cves):
-    # Print and format the fetched JSON data
+from counterspell_auth.credentials import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
 
-    formatted_json = json.dumps(cves, indent=2)
+print("AWS Access Key ID:", AWS_ACCESS_KEY_ID)
+print("AWS Secret Access Key:", AWS_SECRET_ACCESS_KEY)
 
-    with open('output.json', 'a') as f:
-        f.write(formatted_json)
+
+# Initialize DynamoDB client
+dynamodb = boto3.resource(
+    'dynamodb',
+    region_name='us-east-2',
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+)
+table = dynamodb.Table('counterspell-cve')
+
+def output_to_db(cves):
+
+    # Extracted data
+    for cve in cves:
+
+        selected_fields = {
+            "id": cve["cve"]["id"],
+            "published": cve["cve"]["published"],
+            "lastModified": cve["cve"]["lastModified"],
+            "vulnStatus": cve["cve"]["vulnStatus"],
+            "description": [desc["value"] for desc in cve["cve"]["descriptions"] if desc["lang"] == "en"][0],
+            "metrics": json.loads(json.dumps(cve["cve"]["metrics"]), parse_float=Decimal),
+            "weaknesses": [desc["value"] for weakness in cve["cve"]["weaknesses"] for desc in weakness["description"] if desc["lang"] == "en"]
+        }
+
+        print(f'sending put for {selected_fields["id"]}')
+        table.put_item(Item=selected_fields)
+
 
 def fetch_cve_list(start_index, results_per_page=2000):
     base_url = "https://services.nvd.nist.gov/rest/json/cves/2.0/"
@@ -34,37 +60,37 @@ def fetch_cve_list(start_index, results_per_page=2000):
         print(f"Error fetching CVE data: {e}")
         return None
 
-def fetch_all_cves(results_per_page=2000):
+def fetch_all_cves(start_index=0, finish_index=4000, results_per_page=2000):
     # Start fetching CVEs from index 0
-    start_index = 0
+    i = start_index
 
     while True:
-        print(start_index)
-        cves = fetch_cve_list(start_index, results_per_page)
+        print(f'i = {i}')
+        cves = fetch_cve_list(i, results_per_page)
 
         if not cves:
             return -1  # Stop if there's an error fetching CVEs
 
-        output_to_file(cves)
+        output_to_db(cves)
 
         # Update start_index for the next batch
-        start_index += results_per_page
+        i += results_per_page
 
         # Check if there are more CVEs to fetch
-        if start_index >= 4000:
-            print('condition met')
+        if i >= finish_index:
+            print('finish condition met')
             break
 
         time.sleep(10)
 
-    return start_index
+    return finish_index - start_index
 
 if __name__ == "__main__":
     # reset file
     open('output.json', 'w').close()
 
     # fetch cves
-    numFetched = fetch_all_cves()
+    numFetched = fetch_all_cves(start_index=0, finish_index=10, results_per_page=2)
     
     if numFetched != -1:
         print(f"Total CVEs fetched: {numFetched}")
