@@ -4,6 +4,7 @@ import json
 import time
 import boto3
 from boto3.dynamodb.conditions import Key
+from decimal import Decimal
 
 from counterspell_auth.credentials import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
 
@@ -11,33 +12,32 @@ print("AWS Access Key ID:", AWS_ACCESS_KEY_ID)
 print("AWS Secret Access Key:", AWS_SECRET_ACCESS_KEY)
 
 
-# Initialize s3 client
-s3 = boto3.client('s3',
+# Initialize DynamoDB client
+dynamodb = boto3.resource(
+    'dynamodb',
+    region_name='us-east-2',
     aws_access_key_id=AWS_ACCESS_KEY_ID,
-    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-    region_name='us-east-2')
-bucket_name = 'counterspell-raw'
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+)
+table = dynamodb.Table('counterspell-cve')
 
 def output_to_db(cves):
 
-    # iterate through cves
+    # Extracted data
     for cve in cves:
 
-        id = cve["cve"]["id"]
-        object_key = 'cve/'+id
+        selected_fields = {
+            "id": cve["cve"]["id"],
+            "published": cve["cve"]["published"],
+            "lastModified": cve["cve"]["lastModified"],
+            "vulnStatus": cve["cve"]["vulnStatus"],
+            "description": [desc["value"] for desc in cve["cve"]["descriptions"] if desc["lang"] == "en"][0],
+            "metrics": json.loads(json.dumps(cve["cve"]["metrics"]), parse_float=Decimal),
+            "weaknesses": [desc["value"] for weakness in cve["cve"]["weaknesses"] for desc in weakness["description"] if desc["lang"] == "en"]
+        }
 
-        # Convert the JSON data to a string
-        json_string = json.dumps(cve)
-
-        # Upload the JSON string as an object to S3
-        s3.put_object(
-            Bucket=bucket_name,
-            Key=object_key,
-            Body=json_string.encode('utf-8'),
-            ContentType='application/json'
-        )
-
-        print(f"JSON data uploaded to S3://{bucket_name}/{object_key}")
+        print(f'sending put for {selected_fields["id"]}')
+        table.put_item(Item=selected_fields)
 
 
 def fetch_cve_list(start_index, results_per_page=2000):
