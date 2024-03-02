@@ -16,7 +16,7 @@ s3 = boto3.client('s3',
     aws_access_key_id=AWS_ACCESS_KEY_ID,
     aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
     region_name='us-east-2')
-bucket_name = 'counterspell-raw'
+s3_bucket_name = 'counterspell-raw'
 
 def output_to_db(cves):
 
@@ -31,13 +31,13 @@ def output_to_db(cves):
 
         # Upload the JSON string as an object to S3
         s3.put_object(
-            Bucket=bucket_name,
+            Bucket=s3_bucket_name,
             Key=object_key,
             Body=json_string.encode('utf-8'),
             ContentType='application/json'
         )
 
-        print(f"JSON data uploaded to S3://{bucket_name}/{object_key}")
+        print(f"JSON data uploaded to S3://{s3_bucket_name}/{object_key}")
 
 
 def fetch_cve_list(start_index, results_per_page=2000):
@@ -90,7 +90,7 @@ if __name__ == "__main__":
     open('output.json', 'w').close()
 
     # fetch cves
-    numFetched = fetch_all_cves(start_index=0, finish_index=10, results_per_page=2)
+    numFetched = fetch_all_cves(start_index=0, finish_index=2000, results_per_page=200)
     
     if numFetched != -1:
         print(f"Total CVEs fetched: {numFetched}")
