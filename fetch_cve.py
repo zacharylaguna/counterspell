@@ -18,7 +18,10 @@ s3 = boto3.client('s3',
     region_name='us-east-2')
 s3_bucket_name = 'counterspell-raw'
 
+count = 0
+
 def output_to_db(cves):
+    global count
 
     # iterate through cves
     for cve in cves:
@@ -38,6 +41,8 @@ def output_to_db(cves):
         )
 
         print(f"JSON data uploaded to S3://{s3_bucket_name}/{object_key}")
+
+        count += 1
 
 
 def fetch_cve_list(start_index, results_per_page=2000):
@@ -61,6 +66,8 @@ def fetch_cve_list(start_index, results_per_page=2000):
         return None
 
 def fetch_all_cves(start_index=0, finish_index=4000, results_per_page=2000):
+    global count
+
     # Start fetching CVEs from index 0
     i = start_index
 
@@ -68,8 +75,9 @@ def fetch_all_cves(start_index=0, finish_index=4000, results_per_page=2000):
         print(f'i = {i}')
         cves = fetch_cve_list(i, results_per_page)
 
-        if not cves:
-            return -1  # Stop if there's an error fetching CVEs
+        if not cves: # if array is empty
+            break
+            # return -1  # Stop if there's an error fetching CVEs
 
         output_to_db(cves)
 
@@ -81,18 +89,24 @@ def fetch_all_cves(start_index=0, finish_index=4000, results_per_page=2000):
             print('finish condition met')
             break
 
-        time.sleep(10)
+        # time.sleep(10)
 
-    return finish_index - start_index
+    return count
 
 if __name__ == "__main__":
+
+    start = time.time()
+
     # reset file
     open('output.json', 'w').close()
 
     # fetch cves
-    numFetched = fetch_all_cves(start_index=0, finish_index=2000, results_per_page=200)
+    numFetched = fetch_all_cves(start_index=0, finish_index=250000, results_per_page=2000)
     
     if numFetched != -1:
         print(f"Total CVEs fetched: {numFetched}")
     else:
         print("Failed to fetch CVEs.")
+
+    end = time.time()
+    print(f"process took {end - start} seconds")
